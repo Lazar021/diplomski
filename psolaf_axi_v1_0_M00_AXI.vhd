@@ -310,7 +310,8 @@ architecture implementation of psolaf_axi_v1_0_M00_AXI is
 	signal	end_flag_write		: std_logic;
 	signal	flag_m_write		: std_logic;
 	signal  data_available_write		: unsigned(W_HIGH_M_TOP - 1 downto W_LOW_M_TOP);
-
+	signal	reads_done_opseg			: std_logic;
+	--signal	reset_reads_done			: std_logic;
 
 begin
 	-- I/O Connections assignments
@@ -934,12 +935,12 @@ begin
 						
 
 					   flag_opseg_read <= '0';
-					   end_flag_reset <= '0';
+					   --end_flag_reset <= '0';
 					else                                                                                          
 		               mst_exec_state  <= IDLE;
 
 
-					   end_flag_reset <= '1';                                                           
+					   --end_flag_reset <= '1';                                                           
 		             end if;         
 					                                                                            
 				
@@ -968,8 +969,10 @@ begin
 		            -- issued until burst_read_active signal is asserted.                                          
 		            -- read controller     
 					--addr_field_read_s <= "00";      
-					flag_opseg_read <= '1';                                                                   
-		              if (reads_done = '1') then   
+					flag_opseg_read <= '1';   
+					if (reads_done = '1' and end_flag = '1') then 
+                                                                
+		              --if (reads_done = '1') then   
 						flag_opseg_read <= '0';
 		            	mst_exec_state <= INIT_WRITE;   
 		              else                                                                                         
@@ -1041,20 +1044,21 @@ begin
 	 -- response. This demonstrates how to confirm that a write has been                                         
 	 -- committed.                                                                                               
 	                                                                                                             
-	  process(M_AXI_ACLK)                                                                                        
-	  begin                                                                                                      
-	    if (rising_edge (M_AXI_ACLK)) then                                                                       
-	      if (M_AXI_ARESETN = '0' or init_txn_pulse = '1') then                                                                         
-	       writes_done <= '0';                                                                                   
-	      --The reads_done should be associated with a rready response                                           
-	      --elsif (M_AXI_RVALID && axi_rready && (read_burst_counter == {(C_NO_BURSTS_REQ-1){1}}) && axi_rlast)  
-	      else                                                                                                   
-	        if (M_AXI_BVALID = '1' and (write_burst_counter(C_NO_BURSTS_REQ) = '1') and axi_bready = '1') then   
-	          writes_done <= '1';                                                                                
-	        end if;                                                                                              
-	      end if;                                                                                                
-	    end if;                                                                                                  
-	  end process;                                                                                               
+	 process(M_AXI_ACLK)                                                                                        
+	 begin                                                                                                      
+	   if (rising_edge (M_AXI_ACLK)) then                                                                       
+		 if (M_AXI_ARESETN = '0' or init_txn_pulse = '1') then                                                                         
+		  writes_done <= '0';                                                                                   
+		 --The reads_done should be associated with a rready response                                           
+		 --elsif (M_AXI_RVALID && axi_rready && (read_burst_counter == {(C_NO_BURSTS_REQ-1){1}}) && axi_rlast)  
+		 else                                                               
+		   if (end_flag = '1' and axi_wlast = '1') then                                    
+		   --if (M_AXI_BVALID = '1' and (write_burst_counter(C_NO_BURSTS_REQ) = '1') and axi_bready = '1') then   
+			 writes_done <= '1';                                                                                
+		   end if;                                                                                              
+		 end if;                                                                                                
+	   end if;                                                                                                  
+	 end process;                                                                                               
 	                                                                                                             
 	  -- burst_read_active signal is asserted when there is a burst read transaction                            
 	  -- is initiated by the assertion of start_single_burst_read. start_single_burst_read                      
@@ -1100,24 +1104,33 @@ begin
 	 -- response. This demonstrates how to confirm that a read has been                                          
 	 -- committed.                                                                                               
 	                                                                                                             
-	  process(M_AXI_ACLK)                                                                                        
-	  begin                                                                                                      
-	    if (rising_edge (M_AXI_ACLK)) then                                                                       
-	      if (M_AXI_ARESETN = '0' or init_txn_pulse = '1') then                                                                         
-	        reads_done <= '0';                                                                                   
-	        --The reads_done should be associated with a rready response                                         
-	        --elsif (M_AXI_RVALID && axi_rready && (read_burst_counter == {(C_NO_BURSTS_REQ-1){1}}) && axi_rlast)
-	      else                                                                                                   
-	        --if (M_AXI_RVALID = '1' and axi_rready = '1' and (read_index = std_logic_vector (to_unsigned(C_M_AXI_BURST_LEN-1,C_TRANSACTIONS_NUM+1))) and (read_burst_counter(C_NO_BURSTS_REQ) = '1')) then
-			--if (M_AXI_RVALID = '1' and axi_rready = '1' and (read_index = std_logic_vector (to_unsigned(C_M_AXI_BURST_LEN-1,C_TRANSACTIONS_NUM+1)))) then --and (read_burst_counter(C_NO_BURSTS_REQ) = '1')) then
-			--if (end_flag = 1 and M_AXI_RLAST = '1' (resize(unsigned(read_index) + 1,data_available'length) = data_available)) then
-			if (end_flag = '1' and M_AXI_RLAST = '1') then
-				--read_index_reset <= '1';
-				reads_done <= '1';                                                                                 
-	        end if;                                                                                              
-	      end if;                                                                                                
-	    end if;                                                                                                  
-	  end process;                                                                                               
+	 process(M_AXI_ACLK)                                                                                        
+	 begin                                                                                                      
+	   if (rising_edge (M_AXI_ACLK)) then                                                                       
+		 if (M_AXI_ARESETN = '0' or init_txn_pulse = '1' or start_single_burst_read = '1') then                                                                         
+		 --f (reset_reads_done = '1'or M_AXI_ARESETN = '0' or init_txn_pulse = '1' or start_single_burst_read = '1') then                                                                         
+	   
+		   reads_done <= '0';        
+		   
+		   reads_done_opseg <= '0';
+		   --The reads_done should be associated with a rready response                                         
+		   --elsif (M_AXI_RVALID && axi_rready && (read_burst_counter == {(C_NO_BURSTS_REQ-1){1}}) && axi_rlast)
+		 else                                                                                                   
+		   --if (M_AXI_RVALID = '1' and axi_rready = '1' and (read_index = std_logic_vector (to_unsigned(C_M_AXI_BURST_LEN-1,C_TRANSACTIONS_NUM+1))) and (read_burst_counter(C_NO_BURSTS_REQ) = '1')) then
+		   --if (M_AXI_RVALID = '1' and axi_rready = '1' and (read_index = std_logic_vector (to_unsigned(C_M_AXI_BURST_LEN-1,C_TRANSACTIONS_NUM+1)))) then --and (read_burst_counter(C_NO_BURSTS_REQ) = '1')) then
+		   --if (end_flag = 1 and M_AXI_RLAST = '1' (resize(unsigned(read_index) + 1,data_available'length) = data_available)) then
+		   if (end_flag = '1' and M_AXI_RLAST = '1') then
+			   --read_index_reset <= '1';
+				
+			   if(mst_exec_state = INIT_READ_M) then
+				   reads_done <= '1'; 
+			   elsif(mst_exec_state = INIT_READ_OPSEG) then
+				   reads_done_opseg <= '1'; 
+			   end if;
+		   end if;                                                                                              
+		 end if;                                                                                                
+	   end if;                                                                                                  
+	 end process;                                                                                                 
 
 	-- Add user logic here
 
